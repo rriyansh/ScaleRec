@@ -1,58 +1,53 @@
-import os
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
-from two_tower import TwoTower
-import pandas as pd
 import numpy as np
+import pandas as pd
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
+from two_tower import TwoTower
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+# ---- Load data ----
+user_feats = torch.tensor(np.load("data/user_features.npy"))
+item_feats = torch.tensor(np.load("data/item_features.npy"))
+inter = pd.read_csv("data/interactions.csv")
+pos = inter[inter.clicked == 1].reset_index(drop=True)
+
+
+class InteractionDataset(Dataset):
+    def __init__(self, df):
+        self.users = df.user_id.values
+        self.items = df.item_id.values
+
+    def __len__(self):
+        return len(self.users)
+
+    def __getitem__(self, idx):
+        return self.users[idx], self.items[idx]
+
+
+loader = DataLoader(InteractionDataset(pos), batch_size=256, shuffle=True)
+
+# ---- Model ----
+model = TwoTower(user_feats.shape[1], item_feats.shape[1], emb_dim=32)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+# ---- Train ----
 EPOCHS = 5
-BATCH_SIZE = 1024
-LR = 1e-3
-EMBEDDING_DIM = 64
+for epoch in range(EPOCHS):
+    total_loss = 0
+    for u_ids, i_ids in loader:
+        u_emb, i_emb = model(user_feats[u_ids], item_feats[i_ids])
 
+        # Similarity matrix: [B, B]
+        logits = u_emb @ i_emb.T / 0.07  # temperature scaling
+        labels = torch.arange(logits.size(0))  # diagonal = positive
+        loss = F.cross_entropy(logits, labels)
 
-def load_data():
-    interactions = pd.read_csv(os.path.join(DATA_DIR, "interactions.csv"))
-    users = pd.read_csv(os.path.join(DATA_DIR, "users.csv"))
-    items = pd.read_csv(os.path.join(DATA_DIR, "items.csv"))
-    num_users = len(users)
-    num_items = len(items)
-    return interactions, num_users, num_items
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
 
+    print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {total_loss/len(loader):.4f}")
 
-def train():
-    interactions, num_users, num_items = load_data()
-
-    user_ids = torch.LongTensor(interactions["user_id"].values)
-    item_ids = torch.LongTensor(interactions["item_id"].values)
-    labels = torch.FloatTensor(interactions["clicked"].values)
-
-    dataset = TensorDataset(user_ids, item_ids, labels)
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-
-    model = TwoTower(num_users, num_items, embedding_dim=EMBEDDING_DIM)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-    criterion = nn.BCEWithLogitsLoss()
-
-    model.train()
-    for epoch in range(EPOCHS):
-        total_loss = 0
-        for u, i, y in loader:
-            optimizer.zero_grad()
-            logits = model(u, i)
-            loss = criterion(logits, y)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-        print(f"Epoch {epoch+1}/{EPOCHS} loss={total_loss/len(loader):.4f}")
-
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    torch.save(model.state_dict(), os.path.join(MODEL_DIR, "two_tower.pt"))
-    print(f"Saved model to {MODEL_DIR}/two_tower.pt")
-
-
-if __name__ == "__main__":
-    train()
+torch.save(model.state_dict(), "models/two_tower.pt")
+print("✅ Two-Tower model saved!")
