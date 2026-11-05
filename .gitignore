@@ -1,0 +1,11 @@
+# Data & model artifacts (generated locally)
+scalerec/data/*.csv
+scalerec/models/*.pt
+scalerec/models/*.bin
+scalerec/models/*.json
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+.DS_Store
