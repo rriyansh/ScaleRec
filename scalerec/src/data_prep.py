@@ -1,46 +1,30 @@
 import numpy as np
 import pandas as pd
-import os
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-NUM_USERS = 10000
-NUM_ITEMS = 5000
-NUM_INTERACTIONS = 200000
+np.random.seed(42)
 
+NUM_USERS = 500
+NUM_ITEMS = 1000
+NUM_INTERACTIONS = 5000
 
-def generate_synthetic_data():
-    rng = np.random.default_rng(42)
+USER_FEAT_DIM = 10   # fake user features
+ITEM_FEAT_DIM = 10   # fake item features
 
-    users = pd.DataFrame({
-        "user_id": range(NUM_USERS),
-        "age": rng.integers(18, 70, size=NUM_USERS),
-        "gender": rng.choice(["M", "F", "O"], size=NUM_USERS),
-        "city": rng.choice(["Delhi", "Mumbai", "Bangalore", "Kolkata", "Chennai"], size=NUM_USERS),
-    })
+# Random features
+user_features = np.random.rand(NUM_USERS, USER_FEAT_DIM).astype("float32")
+item_features = np.random.rand(NUM_ITEMS, ITEM_FEAT_DIM).astype("float32")
 
-    items = pd.DataFrame({
-        "item_id": range(NUM_ITEMS),
-        "category": rng.choice(["electronics", "fashion", "grocery", "books", "home"], size=NUM_ITEMS),
-        "price": rng.uniform(100, 50000, size=NUM_ITEMS).round(2),
-        "brand": rng.choice(["BrandA", "BrandB", "BrandC", "BrandD"], size=NUM_ITEMS),
-    })
+# Random interactions (user_id, item_id, clicked)
+interactions = pd.DataFrame({
+    "user_id": np.random.randint(0, NUM_USERS, NUM_INTERACTIONS),
+    "item_id": np.random.randint(0, NUM_ITEMS, NUM_INTERACTIONS),
+    "clicked": np.random.randint(0, 2, NUM_INTERACTIONS),
+})
 
-    interactions = pd.DataFrame({
-        "user_id": rng.integers(0, NUM_USERS, size=NUM_INTERACTIONS),
-        "item_id": rng.integers(0, NUM_ITEMS, size=NUM_INTERACTIONS),
-        "rating": rng.choice([1, 2, 3, 4, 5], size=NUM_INTERACTIONS, p=[0.05, 0.1, 0.15, 0.35, 0.35]),
-        "clicked": rng.choice([0, 1], size=NUM_INTERACTIONS, p=[0.3, 0.7]),
-        "purchased": rng.choice([0, 1], size=NUM_INTERACTIONS, p=[0.9, 0.1]),
-    })
+# Save
+np.save("data/user_features.npy", user_features)
+np.save("data/item_features.npy", item_features)
+interactions.to_csv("data/interactions.csv", index=False)
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    users.to_csv(os.path.join(OUTPUT_DIR, "users.csv"), index=False)
-    items.to_csv(os.path.join(OUTPUT_DIR, "items.csv"), index=False)
-    interactions.to_csv(os.path.join(OUTPUT_DIR, "interactions.csv"), index=False)
-
-    return users, items, interactions
-
-
-if __name__ == "__main__":
-    generate_synthetic_data()
-    print("Synthetic data generated in scalerec/data/")
+print("✅ Data saved!")
+print(interactions.head())
