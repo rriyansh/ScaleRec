@@ -1,0 +1,44 @@
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  interactions_file: "interactions.csv"
+  num_users: 50
+  num_items: 100
+  num_interactions: 500
+  user_feat_dim: 4
+  item_feat_dim: 4
+  seed: 42
+
+model:
+  embedding_dim: 8
+  hidden_dim: 16
+  temperature: 0.07
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 1
+
+faiss:
+  index_type: "FlatIP"
+  nlist: 10
+  m: 4
+  nbits: 4
+  nprobe: 5
+
+ranking:
+  n_candidates: 10
+  top_k: 5
+  xgb_params:
+    n_estimators: 10
+    max_depth: 2
+    learning_rate: 0.1
+    objective: "binary:logistic"
+    eval_metric: "auc"
+
+serving:
+  host: "0.0.0.0"
+  port: 8000
+  redis_host: "localhost"
+  redis_port: 6379
+  cache_ttl: 60
