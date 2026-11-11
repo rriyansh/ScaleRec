@@ -1,7 +1,10 @@
+app:
+  name: "ScaleRec"
+  version: "0.2.0"
+
 data:
   raw_dir: "data/raw"
   processed_dir: "data/processed"
-  interactions_file: "interactions.csv"
   num_users: 50
   num_items: 100
   num_interactions: 500
@@ -13,11 +16,13 @@ model:
   embedding_dim: 8
   hidden_dim: 16
   temperature: 0.07
+  dropout: 0.0
 
 training:
-  batch_size: 32
+  batch_size: 16
   learning_rate: 0.001
   epochs: 1
+  weight_decay: 0.0
 
 faiss:
   index_type: "FlatIP"
@@ -30,15 +35,19 @@ ranking:
   n_candidates: 10
   top_k: 5
   xgb_params:
-    n_estimators: 10
+    n_estimators: 5
     max_depth: 2
     learning_rate: 0.1
     objective: "binary:logistic"
     eval_metric: "auc"
 
 serving:
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   port: 8000
-  redis_host: "localhost"
-  redis_port: 6379
-  cache_ttl: 60
+  workers: 1
+  request_timeout: 5.0
+  max_batch_size: 10
+  cors_origins: ["*"]
+  rate_limit_per_minute: 1000
+  max_request_bytes: 1048576
+  include_docs: true
