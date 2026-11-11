@@ -1,20 +1,17 @@
 import faiss
-import numpy as np
-import pandas as pd
 
 from src.config import load_config
-from src.data.synthetic import generate
-from src.data.preprocess import preprocess
-from src.retrieval.train import train as train_retrieval
-from src.retrieval.build_index import build_index
 
 
-def test_retrieval_pipeline(cfg_path):
-    generate(cfg_path)
-    preprocess(cfg_path)
-    train_retrieval(cfg_path)
-    build_index(cfg_path)
-
-    index = faiss.read_index("models_store/faiss_index.bin")
+def test_faiss_index_exists(cfg_path, prepare_artifacts):
+    idx = faiss.read_index("models_store/faiss_index.bin")
     cfg = load_config(cfg_path)
-    assert index.ntotal == cfg.data.num_items
+    assert idx.ntotal == cfg.data.num_items
+
+
+def test_item_embeddings_match_index(cfg_path, prepare_artifacts):
+    import numpy as np
+    emb = np.load("models_store/item_embeddings.npy")
+    cfg = load_config(cfg_path)
+    assert emb.shape[0] == cfg.data.num_items
+    assert emb.shape[1] == cfg.model.embedding_dim
