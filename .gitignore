@@ -8,11 +8,16 @@ dist/
 .venv/
 venv/
 .env
+.env.local
+.env.prod
 .idea/
 .vscode/
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
@@ -20,4 +25,7 @@ data/processed/*
 models_store/*
 !models_store/.gitkeep
 *.log
+*.pem
+*.key
 .DS_Store
+Thumbs.db
