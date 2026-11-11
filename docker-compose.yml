@@ -3,8 +3,12 @@ version: "3.9"
 services:
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -12,16 +16,31 @@ services:
       retries: 5
 
   scalerec:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - CONFIG_PATH=config/config.yaml
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      CONFIG_PATH: config/config.yaml
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      API_KEY: dev-key-change-me-in-prod
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./models_store:/app/models_store
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/live"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  redis_data:
