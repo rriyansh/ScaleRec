@@ -1,0 +1,53 @@
+app:
+  name: "ScaleRec"
+  version: "0.2.0"
+
+data:
+  raw_dir: "/var/lib/scalerec/data/raw"
+  processed_dir: "/var/lib/scalerec/data/processed"
+  num_users: 1000000
+  num_items: 5000000
+  num_interactions: 50000000
+  user_feat_dim: 64
+  item_feat_dim: 64
+  seed: 42
+
+model:
+  embedding_dim: 128
+  hidden_dim: 256
+  temperature: 0.07
+  dropout: 0.1
+
+training:
+  batch_size: 2048
+  learning_rate: 0.0005
+  epochs: 20
+  weight_decay: 0.0001
+
+faiss:
+  index_type: "IVFPQ"
+  nlist: 4096
+  m: 32
+  nbits: 8
+  nprobe: 32
+
+ranking:
+  n_candidates: 100
+  top_k: 20
+  xgb_params:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.05
+    objective: "binary:logistic"
+    eval_metric: "auc"
+
+serving:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  request_timeout: 3.0
+  max_batch_size: 500
+  cors_origins: ["https://app.example.com"]
+  rate_limit_per_minute: 6000
+  max_request_bytes: 2097152
+  include_docs: false
