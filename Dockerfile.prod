@@ -1,0 +1,46 @@
+# Multi-stage production build — minimal attack surface
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_HOME=/app \
+    APP_ENV=production
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 curl tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1001 app \
+    && useradd --system --uid 1001 --gid app --create-home --shell /sbin/nologin app
+
+WORKDIR ${APP_HOME}
+
+COPY --from=builder --chown=app:app /root/.local /home/app/.local
+COPY --chown=app:app src/ ./src/
+COPY --chown=app:app config/config.prod.yaml ./config/config.yaml
+COPY --chown=app:app config/logging.yaml ./config/logging.yaml
+COPY --chown=app:app pyproject.toml ./
+
+RUN mkdir -p /var/lib/scalerec/data /var/lib/scalerec/models \
+    && chown -R app:app /var/lib/scalerec
+
+ENV PATH=/home/app/.local/bin:$PATH \
+    PYTHONPATH=${APP_HOME} \
+    CONFIG_PATH=/app/config/config.yaml \
+    MODELS_DIR=/var/lib/scalerec/models \
+    DATA_DIR=/var/lib/scalerec/data/processed
+
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health/ready || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["uvicorn", "src.serving.api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
