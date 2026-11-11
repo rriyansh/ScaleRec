@@ -1,43 +1,82 @@
-"""Redis cache wrapper with graceful fallback."""
+"""Redis cache wrapper with circuit breaker, pooling, and metrics."""
+from __future__ import annotations
+
 import json
-import logging
 from typing import Any
 
 import redis
 
-logger = logging.getLogger(__name__)
+from src.circuit_breaker import CircuitBreaker
+from src.config import RedisConfig
+from src.logger import get_logger
+from src.metrics import CACHE_ERRORS, CACHE_HITS, CACHE_MISSES
+
+logger = get_logger(__name__)
 
 
 class RedisCache:
-    def __init__(self, host: str = "localhost", port: int = 6379,
-                 ttl: int = 300):
-        self.ttl = ttl
+    def __init__(self, cfg: RedisConfig):
+        self.ttl = cfg.ttl
+        self._breaker = CircuitBreaker(
+            name="redis", failure_threshold=5, recovery_timeout=30.0
+        )
         try:
-            self.client = redis.Redis(
-                host=host, port=port, decode_responses=True,
-                socket_connect_timeout=1,
+            pool = redis.ConnectionPool(
+                host=cfg.host,
+                port=cfg.port,
+                db=cfg.db,
+                password=cfg.password or None,
+                socket_timeout=cfg.socket_timeout,
+                socket_connect_timeout=cfg.socket_timeout,
+                max_connections=cfg.max_connections,
+                decode_responses=True,
             )
+            self.client: redis.Redis | None = redis.Redis(connection_pool=pool)
             self.client.ping()
             self.enabled = True
-            logger.info("Redis cache enabled at %s:%s", host, port)
+            logger.info("Redis connected: %s:%d db=%d", cfg.host, cfg.port, cfg.db)
         except Exception as e:
             self.client = None
             self.enabled = False
-            logger.warning("Redis unavailable (%s); cache disabled", e)
+            logger.warning("Redis unavailable, cache disabled: %s", e)
 
     def get(self, key: str) -> Any | None:
-        if not self.enabled:
+        if not self.enabled or self.client is None:
             return None
         try:
-            val = self.client.get(key)
-            return json.loads(val) if val else None
-        except Exception:
+            val = self._breaker.call(self.client.get, key)
+            if val is None:
+                CACHE_MISSES.inc()
+                return None
+            CACHE_HITS.inc()
+            return json.loads(val)
+        except Exception as e:
+            CACHE_ERRORS.inc()
+            logger.debug("cache_get_failed key=%s err=%s", key, e)
             return None
 
     def set(self, key: str, value: Any) -> None:
-        if not self.enabled:
+        if not self.enabled or self.client is None:
             return
         try:
-            self.client.setex(key, self.ttl, json.dumps(value))
+            payload = json.dumps(value, separators=(",", ":"))
+            self._breaker.call(self.client.setex, key, self.ttl, payload)
+        except Exception as e:
+            CACHE_ERRORS.inc()
+            logger.debug("cache_set_failed key=%s err=%s", key, e)
+
+    def delete(self, key: str) -> None:
+        if not self.enabled or self.client is None:
+            return
+        try:
+            self._breaker.call(self.client.delete, key)
         except Exception:
-            pass
+            CACHE_ERRORS.inc()
+
+    def health(self) -> bool:
+        if not self.enabled or self.client is None:
+            return False
+        try:
+            return self._breaker.call(self.client.ping) is True
+        except Exception:
+            return False
