@@ -1,4 +1,6 @@
 """Build FAISS index from trained item tower embeddings."""
+from __future__ import annotations
+
 from pathlib import Path
 
 import faiss
@@ -12,31 +14,41 @@ from src.models.two_tower import TwoTower
 logger = get_logger(__name__)
 
 
-def build_index(config_path: str | None = None) -> None:
+def load_trained_tower(path: str | Path, device: str = "cpu") -> tuple[TwoTower, dict]:
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    cfg = ckpt["config"]
+    model = TwoTower(
+        user_dim=cfg["user_dim"],
+        item_dim=cfg["item_dim"],
+        emb_dim=cfg["emb_dim"],
+        hidden_dim=cfg["hidden_dim"],
+        temperature=cfg["temperature"],
+        dropout=cfg["dropout"],
+    )
+    model.load_state_dict(ckpt["state_dict"])
+    model.eval()
+    return model, cfg
+
+
+def build_index(config_path: str | None = None) -> Path:
     setup_logging()
     cfg = load_config(config_path)
-    device = torch.device("cpu")
-
     proc_dir = cfg.data.processed_dir
-    user_feats = torch.tensor(np.load(f"{proc_dir}/user_features.npy"))
-    item_feats = torch.tensor(np.load(f"{proc_dir}/item_features.npy"))
 
-    model = TwoTower(
-        user_dim=user_feats.shape[1],
-        item_dim=item_feats.shape[1],
-        emb_dim=cfg.model.embedding_dim,
-        hidden_dim=cfg.model.hidden_dim,
-        temperature=cfg.model.temperature,
-    )
-    model.load_state_dict(torch.load("models_store/two_tower.pt", map_location=device))
-    model.eval()
+    item_feats = torch.tensor(np.load(f"{proc_dir}/item_features.npy"))
+    model, model_cfg = load_trained_tower("models_store/two_tower.pt")
 
     item_emb = model.encode_items(item_feats).numpy().astype("float32")
     dim = item_emb.shape[1]
-
-    logger.info("Building FAISS index: %d items, dim=%d", item_emb.shape[0], dim)
+    n = item_emb.shape[0]
+    logger.info("Building FAISS index items=%d dim=%d type=%s",
+                n, dim, cfg.faiss.index_type)
 
     if cfg.faiss.index_type == "IVFPQ":
+        if n < cfg.faiss.nlist:
+            raise ValueError(
+                f"IVFPQ needs n_items >= nlist ({n} < {cfg.faiss.nlist})"
+            )
         quantizer = faiss.IndexFlatIP(dim)
         index = faiss.IndexIVFPQ(
             quantizer, dim, cfg.faiss.nlist, cfg.faiss.m, cfg.faiss.nbits
@@ -48,11 +60,12 @@ def build_index(config_path: str | None = None) -> None:
         index = faiss.IndexFlatIP(dim)
         index.add(item_emb)
 
-    out_dir = Path("models_store")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    faiss.write_index(index, str(out_dir / "faiss_index.bin"))
-    np.save(out_dir / "item_embeddings.npy", item_emb)
-    logger.info("Saved FAISS index (%d vectors)", index.ntotal)
+    out = Path("models_store")
+    out.mkdir(parents=True, exist_ok=True)
+    faiss.write_index(index, str(out / "faiss_index.bin"))
+    np.save(out / "item_embeddings.npy", item_emb)
+    logger.info("FAISS index written: %d vectors", index.ntotal)
+    return out / "faiss_index.bin"
 
 
 if __name__ == "__main__":
