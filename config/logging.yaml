@@ -3,8 +3,11 @@ disable_existing_loggers: false
 
 formatters:
   standard:
-    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    format: "%(asctime)s [%(levelname)s] %(name)s [%(request_id)s]: %(message)s"
     datefmt: "%Y-%m-%d %H:%M:%S"
+  json:
+    class: pythonjsonlogger.jsonlogger.JsonFormatter
+    format: "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 handlers:
   console:
@@ -16,3 +19,17 @@ handlers:
 root:
   level: INFO
   handlers: [console]
+
+loggers:
+  uvicorn:
+    level: INFO
+    handlers: [console]
+    propagate: false
+  uvicorn.error:
+    level: INFO
+    handlers: [console]
+    propagate: false
+  uvicorn.access:
+    level: INFO
+    handlers: [console]
+    propagate: false
