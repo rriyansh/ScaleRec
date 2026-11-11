@@ -1,7 +1,10 @@
+ app:
+  name: "ScaleRec"
+  version: "0.2.0"
+
 data:
   raw_dir: "data/raw"
   processed_dir: "data/processed"
-  interactions_file: "interactions.csv"
   num_users: 500
   num_items: 1000
   num_interactions: 5000
@@ -13,11 +16,13 @@ model:
   embedding_dim: 32
   hidden_dim: 64
   temperature: 0.07
+  dropout: 0.1
 
 training:
   batch_size: 256
   learning_rate: 0.001
   epochs: 5
+  weight_decay: 0.0001
 
 faiss:
   index_type: "FlatIP"
@@ -39,6 +44,10 @@ ranking:
 serving:
   host: "0.0.0.0"
   port: 8000
-  redis_host: "localhost"
-  redis_port: 6379
-  cache_ttl: 300
+  workers: 1
+  request_timeout: 5.0
+  max_batch_size: 100
+  cors_origins: ["http://localhost:3000", "http://localhost:8000"]
+  rate_limit_per_minute: 120
+  max_request_bytes: 1048576
+  include_docs: true
