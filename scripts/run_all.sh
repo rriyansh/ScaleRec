@@ -5,5 +5,3 @@ bash scripts/train_retrieval.sh
 bash scripts/build_index.sh
 bash scripts/train_ranking.sh
 bash scripts/serve_api.sh
-
-chmod +x scripts/*.sh
